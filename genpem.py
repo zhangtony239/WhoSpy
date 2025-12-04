@@ -6,8 +6,8 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 
 # --- 配置 ---
-CERTFILE = "C:\\repos\\WhoSpy\\cert.pem"
-KEYFILE = "C:\\repos\\WhoSpy\\key.pem"
+CERTFILE = "cert.pem"
+KEYFILE = "key.pem"
 SUBJECT_NAME = "localhost" # 必须与aioquic客户端的SERVER_NAME匹配
 
 def generate_self_signed_cert():
