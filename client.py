@@ -71,9 +71,13 @@ def get_local_ip_via_os_command():
 
 # 调用函数并打印结果
 ip_address = get_local_ip_via_os_command()
-ip_address = ip_address.split('.') # type: ignore
-ip_address.pop()
-ip_address = '.'.join(ip_address)
+if ip_address:
+    ip_address = ip_address.split('.') # type: ignore
+    ip_address.pop()
+    ip_address = '.'.join(ip_address)
+else:
+    print("Warning: Could not determine local IP. Assuming localhost for testing.")
+    ip_address = "127.0.0" # Fallback
 
 while True:
     pairCode = input("请输入4位房间号：")
@@ -101,6 +105,7 @@ async def run_client():
         # **重要：** 由于是自签名证书，我们在这里禁用证书验证。
         # 在生产环境中，应该提供 ca_certs 来验证服务器证书。
         verify_mode=ssl.CERT_NONE, 
+        idle_timeout=300.0, # 增加超时时间
     )
 
     print(f"Attempting to connect to {SERVER_HOST}:{SERVER_PORT}")
@@ -116,26 +121,34 @@ async def run_client():
             # 3. 创建一个双向流
             reader, writer = await protocol.create_stream()
 
-            # 4. 发送数据
-            message = "Hello from aioquic client!"
+            # 4. 发送初始数据 (必须发送数据以触发服务器的 stream_handler)
+            message = "Hello from client!"
             writer.write(message.encode())
             print(f"➡️ Sent: {message}")
             
-            # 5. 通知服务器发送完毕并关闭发送侧
-            writer.write_eof()
-            await writer.drain()
-
-            # 6. 接收响应
-            data = await reader.read()
-            response = data.decode()
-            print(f"👂 Received: {response}")
-            
-            # 7. 关闭流
-            writer.close()
-            print("✅ Stream closed.")
+            # 5. 持续接收响应
+            try:
+                while True:
+                    data = await reader.read(1024)
+                    if not data:
+                        print("Server closed the stream.")
+                        break
+                    response = data.decode()
+                    print(f"👂 Received: {response}")
+            except asyncio.CancelledError:
+                print("Connection cancelled.")
+            except Exception as e:
+                print(f"Stream error: {e}")
+            finally:
+                # 7. 关闭流
+                writer.close()
+                print("✅ Stream closed.")
 
     except Exception as e:
         print(f"❌ Connection error: {e}")
 
 if __name__ == "__main__":
-    asyncio.run(run_client())
+    try:
+        asyncio.run(run_client())
+    except KeyboardInterrupt:
+        print("\nClient shutting down.")
