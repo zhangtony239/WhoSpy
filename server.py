@@ -42,12 +42,12 @@ def get_local_ip_via_os_command():
         output = result.stdout
         
         # 2. 正则表达式匹配私有 IP 地址
-        # 匹配 192.168.x.x, 172.16-31.x.x, 或 10.x.x.x
-        # 我们这里简化一下，只找 192. 或 10. 开头的，这通常是目标地址
+        # 匹配 192.168.x.x, 172.16-31.x.x, 或 172x.x.x
+        # 我们这里简化一下，只找 192. 或 172. 开头的，这通常是目标地址
         
-        # 匹配 IPv4 地址，且要求是 192. 或 10. 开头的
+        # 匹配 IPv4 地址，且要求是 192. 或 172. 开头的
         # \d{1,3} 匹配 1 到 3 位数字
-        ip_pattern = re.compile(r'\b(192\.\d{1,3}\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3})\b')
+        ip_pattern = re.compile(r'\b(192\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.\d{1,3}\.\d{1,3}\.\d{1,3})\b')
         
         # 3. 查找所有匹配的 IP
         matches = ip_pattern.findall(output)
@@ -85,14 +85,14 @@ PORT = int("1"+pairCode)
 CERTFILE = "cert.pem"  # 你的证书文件
 KEYFILE = "key.pem"    # 你的私钥文件
 
-async def stream_handler(reader: StreamReader, writer: StreamWriter):
-    """处理新传入的 QUIC 流"""
+async def handle_stream(reader: StreamReader, writer: StreamWriter):
+    """处理新传入的 QUIC 流的具体逻辑"""
     peername = writer.get_extra_info('peername')
     print(f"✅ New stream established from {peername}")
 
     try:
         # 1. 接收数据
-        data = await reader.read(65535)
+        data = await reader.read()
         message = data.decode()
         print(f"👂 Received: {message}")
 
@@ -110,6 +110,12 @@ async def stream_handler(reader: StreamReader, writer: StreamWriter):
     finally:
         writer.close()
 
+def stream_handler(reader: StreamReader, writer: StreamWriter):
+    """
+    aioquic 的回调是同步的，所以我们需要在这里创建一个 Task 来运行异步处理逻辑。
+    """
+    asyncio.create_task(handle_stream(reader, writer))
+
 async def main():
     # 1. 配置 QUIC
     configuration = QuicConfiguration(
@@ -124,7 +130,7 @@ async def main():
         host=HOST,
         port=PORT,
         configuration=configuration,
-        stream_handler=stream_handler,  # 传入流处理函数 # type: ignore
+        stream_handler=stream_handler,  # 传入流处理函数
     )
     
     # 3. 保持运行
